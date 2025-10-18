@@ -985,7 +985,7 @@
         <header class="top-nav">
             <div class="app-logo">
                 <i class="fas fa-comments"></i>
-                <span id="app-title">TalkEase</span>
+                <span id="app-title"></span>
             </div>
             <div class="nav-actions">
                 <button class="nav-btn" onclick="toggleSearch()" title="搜索">
@@ -1205,6 +1205,9 @@
         });
 
         function initializeApp() {
+        
+            initializeTyped();
+        
             const savedUser = localStorage.getItem('currentUser');
             if (savedUser) {
                 currentUser = JSON.parse(savedUser);
@@ -1213,6 +1216,17 @@
                 startMessagePolling();
                 startHeartbeat();
             }
+        }
+        
+        function initializeTyped() {
+        new Typed('#app-title', {
+            strings: ['TalkEase', '聊天应用', '实时通讯'],
+            typeSpeed: 100,
+            backSpeed: 50,
+            backDelay: 2000,
+            loop: true,
+            showCursor: false
+        });
         }
 
         function setupEventListeners() {
