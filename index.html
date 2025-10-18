@@ -415,18 +415,18 @@
         }
         
         /* 聊天界面 */
-        .chat-interface {
+        .talkease-interface {
             flex: 1;
             display: none;
             flex-direction: column;
             overflow: hidden;
         }
         
-        .chat-interface.active {
+        .talkease-interface.active {
             display: flex;
         }
         
-        .chat-header {
+        .talkease-header {
             background: var(--bg-secondary);
             padding: var(--spacing-md) var(--spacing-lg);
             border-bottom: 1px solid var(--glass-border);
@@ -435,18 +435,18 @@
             align-items: center;
         }
         
-        .chat-title {
+        .talkease-title {
             font-size: 18px;
             font-weight: 600;
             color: var(--text-primary);
         }
         
-        .chat-actions {
+        .talkease-actions {
             display: flex;
             gap: var(--spacing-sm);
         }
         
-        .chat-action-btn {
+        .talkease-action-btn {
             background: var(--glass-bg);
             border: 1px solid var(--glass-border);
             color: var(--text-primary);
@@ -461,7 +461,7 @@
             font-size: 14px;
         }
         
-        .chat-action-btn:hover {
+        .talkease-action-btn:hover {
             background: var(--primary);
             color: white;
             transform: translateY(-1px);
@@ -1063,14 +1063,14 @@
             </div>
 
             <!-- 聊天界面 -->
-            <div class="chat-interface" id="chat-interface">
-                <div class="chat-header">
-                    <h2 class="chat-title">聊天室</h2>
-                    <div class="chat-actions">
-                        <button class="chat-action-btn" onclick="clearMessages()" title="清空消息">
+            <div class="talkease-interface" id="talkease-interface">
+                <div class="talkease-header">
+                    <h2 class="talkease-title">聊天室</h2>
+                    <div class="talkease-actions">
+                        <button class="talkease-action-btn" onclick="clearMessages()" title="清空消息">
                             <i class="fas fa-trash"></i>
                         </button>
-                        <button class="chat-action-btn" onclick="exportMessages()" title="导出消息">
+                        <button class="talkease-action-btn" onclick="exportMessages()" title="导出消息">
                             <i class="fas fa-download"></i>
                         </button>
                     </div>
@@ -1135,7 +1135,7 @@
 
         <!-- 底部导航栏 -->
         <nav class="bottom-nav" id="bottom-nav" style="display: none;">
-            <a href="#" class="bottom-nav-item active" onclick="showChat()">
+            <a href="#" class="bottom-nav-item active" onclick="showTalkEase()">
                 <i class="fas fa-comment"></i>
                 <span>聊天</span>
             </a>
@@ -1186,7 +1186,7 @@
         let messages = [];
         let onlineUsers = [];
         let messageInterval = null;
-        let currentView = 'chat';
+        let currentView = 'talkease';
         let searchMode = false;
         let heartbeatInterval = null;
 
@@ -1340,7 +1340,7 @@
             document.getElementById('auth-container').style.display = 'none';
             document.getElementById('user-status-bar').style.display = 'flex';
             document.getElementById('bottom-nav').style.display = 'flex';
-            document.getElementById('chat-interface').classList.add('active');
+            document.getElementById('talkease-interface').classList.add('active');
             updateUserInfo();
             loadMessages();
             updateOnlineCount();
@@ -1364,11 +1364,11 @@
             }
         }
 
-        function showChat() {
-            currentView = 'chat';
+        function showTalkEase() {
+            currentView = 'talkease';
             updateBottomNav();
 
-            document.getElementById('chat-interface').classList.add('active');
+            document.getElementById('talkease-interface').classList.add('active');
             document.getElementById('user-list').classList.remove('active');
             document.getElementById('settings').classList.remove('active');
         }
@@ -1378,7 +1378,7 @@
             updateBottomNav();
             loadOnlineUsers();
 
-            document.getElementById('chat-interface').classList.remove('active');
+            document.getElementById('talkease-interface').classList.remove('active');
             document.getElementById('user-list').classList.add('active');
             document.getElementById('settings').classList.remove('active');
         }
@@ -1387,7 +1387,7 @@
             currentView = 'settings';
             updateBottomNav();
 
-            document.getElementById('chat-interface').classList.remove('active');
+            document.getElementById('talkease-interface').classList.remove('active');
             document.getElementById('user-list').classList.remove('active');
             document.getElementById('settings').classList.add('active');
         }
@@ -1396,7 +1396,7 @@
             const items = document.querySelectorAll('.bottom-nav-item');
             items.forEach(item => item.classList.remove('active'));
 
-            const activeIndex = currentView === 'chat' ? 0 : currentView === 'users' ? 1 : 2;
+            const activeIndex = currentView === 'talkease' ? 0 : currentView === 'users' ? 1 : 2;
             items[activeIndex].classList.add('active');
         }
 
@@ -1688,7 +1688,7 @@
         function jumpToMessage(messageId) {
             closeSearchModal();
         
-            showChat();
+            showTalkEase();
         
             const messagesContainer = document.getElementById('messages-container');
             const targetMessage = document.querySelector(`[data-message-id="${messageId}"]`);
@@ -1772,7 +1772,7 @@
             document.getElementById('auth-container').style.display = 'flex';
             document.getElementById('user-status-bar').style.display = 'none';
             document.getElementById('bottom-nav').style.display = 'none';
-            document.getElementById('chat-interface').classList.remove('active');
+            document.getElementById('talkease-interface').classList.remove('active');
 
             document.getElementById('login-form').reset();
             document.getElementById('register-form').reset();
