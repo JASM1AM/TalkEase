@@ -1189,24 +1189,24 @@
         let currentView = 'talkease';
         let searchMode = false;
         let heartbeatInterval = null;
-
+        
         const API_BASE = '';
-
+        
         document.addEventListener('DOMContentLoaded', function() {
             initializeApp();
             setupEventListeners();
         });
-
+        
         document.addEventListener('DOMContentLoaded', function() {
             const refreshButton = document.getElementById('refreshButton');
             refreshButton.addEventListener('click', function() {
                 location.reload();
             });
         });
-
+        
         function initializeApp() {
         
-            initializeTyped();
+        initializeTyped();
         
             const savedUser = localStorage.getItem('currentUser');
             if (savedUser) {
@@ -1228,7 +1228,7 @@
             showCursor: false
         });
         }
-
+        
         function setupEventListeners() {
             const messageInput = document.getElementById('message-input');
             messageInput.addEventListener('keypress', function(e) {
@@ -1237,24 +1237,24 @@
                     sendMessage();
                 }
             });
-
+        
             messageInput.addEventListener('input', function() {
                 this.style.height = 'auto';
                 this.style.height = Math.min(this.scrollHeight, 100) + 'px';
             });
-
+        
             document.getElementById('modal').addEventListener('click', function(e) {
                 if (e.target === this) {
                     closeModal();
                 }
             });
-
+        
             document.getElementById('search-modal').addEventListener('click', function(e) {
                 if (e.target === this) {
                     closeSearchModal();
                 }
             });
-
+        
             document.querySelector('.auth-tabs').addEventListener('click', function(e) {
                 if (e.target.classList.contains('auth-tab')) {
                     const tab = e.target.getAttribute('data-tab');
@@ -1262,30 +1262,30 @@
                 }
             });
         }
-
+        
         function switchAuthTab(tab) {
             const tabs = document.querySelectorAll('.auth-tab');
             const forms = document.querySelectorAll('.auth-form');
-
+        
             tabs.forEach(t => t.classList.remove('active'));
             forms.forEach(f => f.classList.remove('active'));
-
+        
             const activeTab = document.querySelector(`.auth-tab[data-tab="${tab}"]`);
             if (activeTab) {
                 activeTab.classList.add('active');
             }
-
+        
             const activeForm = document.getElementById(tab + '-form');
             if (activeForm) {
                 activeForm.classList.add('active');
             }
         }
-
+        
         async function handleLogin(event) {
             event.preventDefault();
             const qq = document.getElementById('login-qq').value;
             const password = document.getElementById('login-password').value;
-
+        
             try {
                 const response = await fetch('/api/login', {
                     method: 'POST',
@@ -1294,9 +1294,9 @@
                     },
                     body: JSON.stringify({ qq, password })
                 });
-
+        
                 const data = await response.json();
-
+        
                 if (response.ok) {
                     currentUser = data.user;
                     localStorage.setItem('currentUser', JSON.stringify(currentUser));
@@ -1311,45 +1311,50 @@
                 showToast('网络错误，请重试', 'error');
             }
         }
-
+        
         async function handleRegister(event) {
             event.preventDefault();
             const qq = document.getElementById('register-qq').value;
             const nickname = document.getElementById('register-nickname').value;
             const password = document.getElementById('register-password').value;
-
+        
             try {
-                const response = await fetch('/api/register', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ qq, nickname, password })
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || '注册失败');
-                }
-
-                const data = await response.json();
-
-                if (data.message === '注册成功') {
-                    showToast('注册成功，请登录', 'success');
-                    switchAuthTab('login');
-                    document.getElementById('login-qq').value = qq;
-                    document.getElementById('register-qq').value = '';
-                    document.getElementById('register-nickname').value = '';
-                    document.getElementById('register-password').value = '';
-                } else {
-                    throw new Error(data.error || '注册失败');
-                }
+        const response = await fetch('/api/register', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ qq, nickname, password })
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            
+            if (response.status === 429) {
+                showToast(errorData.error, 'warning');
+                return;
+            }
+            throw new Error(errorData.error || '注册失败');
+        }
+        
+        const data = await response.json();
+        
+        if (data.message === '注册成功') {
+            showToast('注册成功，请登录', 'success');
+            switchAuthTab('login');
+            document.getElementById('login-qq').value = qq;
+            document.getElementById('register-qq').value = '';
+            document.getElementById('register-nickname').value = '';
+            document.getElementById('register-password').value = '';
+        } else {
+            throw new Error(data.error || '注册失败');
+        }
             } catch (error) {
-                console.error('注册错误:', error);
-                showToast(error.message || '网络错误，请重试', 'error');
+        console.error('注册错误:', error);
+        showToast(error.message || '网络错误，请重试', 'error');
             }
         }
-
+        
         function showMainInterface() {
             document.getElementById('auth-container').style.display = 'none';
             document.getElementById('user-status-bar').style.display = 'flex';
@@ -1359,66 +1364,66 @@
             loadMessages();
             updateOnlineCount();
         }
-
+        
         function updateUserInfo() {
             if (currentUser) {
                 const avatar = document.getElementById('current-user-avatar');
                 const name = document.getElementById('current-user-name');
                 const id = document.getElementById('current-user-id');
-
+        
                 const qqAvatarUrl = `https://q1.qlogo.cn/g?b=qq&nk=${currentUser.qq}&s=100`;
                 avatar.innerHTML = `<img src="${qqAvatarUrl}" alt="头像" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
                     <div style="display: none;">${currentUser.nickname.charAt(0).toUpperCase()}</div>`;
-
+        
                 name.textContent = currentUser.nickname;
                 id.textContent = `QQ: ${currentUser.qq}`;
-
+        
                 document.getElementById('settings-qq').textContent = currentUser.qq;
                 document.getElementById('settings-nickname').textContent = currentUser.nickname;
             }
         }
-
+        
         function showTalkEase() {
             currentView = 'talkease';
             updateBottomNav();
-
+        
             document.getElementById('talkease-interface').classList.add('active');
             document.getElementById('user-list').classList.remove('active');
             document.getElementById('settings').classList.remove('active');
         }
-
+        
         function showUserList() {
             currentView = 'users';
             updateBottomNav();
             loadOnlineUsers();
-
+        
             document.getElementById('talkease-interface').classList.remove('active');
             document.getElementById('user-list').classList.add('active');
             document.getElementById('settings').classList.remove('active');
         }
-
+        
         function showSettings() {
             currentView = 'settings';
             updateBottomNav();
-
+        
             document.getElementById('talkease-interface').classList.remove('active');
             document.getElementById('user-list').classList.remove('active');
             document.getElementById('settings').classList.add('active');
         }
-
+        
         function updateBottomNav() {
             const items = document.querySelectorAll('.bottom-nav-item');
             items.forEach(item => item.classList.remove('active'));
-
+        
             const activeIndex = currentView === 'talkease' ? 0 : currentView === 'users' ? 1 : 2;
             items[activeIndex].classList.add('active');
         }
-
+        
         function scrollToBottom() {
             const container = document.getElementById('messages-container');
             container.scrollTop = container.scrollHeight;
         }
-
+        
         async function loadMessages() {
             try {
                 const response = await fetch('/api/messages');
@@ -1426,57 +1431,57 @@
                     const data = await response.json();
                     console.log("加载的消息数据:", data);
                     const newMessages = data.messages || [];
-
+        
                     const renderedMessageIds = new Set(
                         Array.from(document.getElementById('messages-container').children)
                             .map(el => el.dataset.messageId)
                     );
-
+        
                     const messagesToAdd = newMessages.filter(msg => !renderedMessageIds.has(msg.id));
-
+        
                     console.log("新消息:", messagesToAdd);
-
+        
                     messagesToAdd.forEach(message => {
                         const messageElement = createMessageElement(message);
                         messageElement.dataset.messageId = message.id;
                         document.getElementById('messages-container').appendChild(messageElement);
                     });
-
+        
                     messages = [...messages, ...messagesToAdd];
-
+        
                     scrollToBottom();
                 }
             } catch (error) {
                 console.error('加载消息失败:', error);
             }
         }
-
+        
         function renderMessages() {
             const container = document.getElementById('messages-container');
             container.innerHTML = '';
-
+        
             messages.forEach(message => {
                 const messageElement = createMessageElement(message);
                 container.appendChild(messageElement);
             });
-
+        
             container.scrollTop = container.scrollHeight;
         }
-
+        
         function createMessageElement(message) {
             const div = document.createElement('div');
             const isOwn = currentUser && message.qq === currentUser.qq;
             div.className = `message ${isOwn ? 'own' : ''}`;
             div.dataset.messageId = message.id;
-
+        
             const time = new Date(message.created_at).toLocaleTimeString('zh-CN', {
                 hour: '2-digit',
                 minute: '2-digit'
             });
-
+        
             const qqAvatarUrl = `https://q1.qlogo.cn/g?b=qq&nk=${message.qq}&s=100`;
             const avatarFallback = message.nickname.charAt(0).toUpperCase();
-
+        
             div.innerHTML = `
                 <div class="message-avatar">
                     <img src="${qqAvatarUrl}" alt="头像" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
@@ -1492,40 +1497,46 @@
                     </div>
                 </div>
             `;
-
+        
             return div;
         }
-
+        
         async function sendMessage() {
             const input = document.getElementById('message-input');
             const content = input.value.trim();
-
+        
             if (!content || !currentUser) return;
-
+        
             try {
-                const response = await fetch('/api/message', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        qq: currentUser.qq,
-                        content: content
-                    })
-                });
-
-                if (response.ok) {
-                    input.value = '';
-                    input.style.height = 'auto';
-                    loadMessages();
-                } else {
-                    showToast('发送失败', 'error');
-                }
-            } catch (error) {
-                showToast('网络错误，请重试', 'error');
+        const response = await fetch('/api/message', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                qq: currentUser.qq,
+                content: content
+            })
+        });
+        
+        if (response.ok) {
+            input.value = '';
+            input.style.height = 'auto';
+            loadMessages();
+        } else {
+            const errorData = await response.json();
+            
+            if (response.status === 429) {
+                showToast(errorData.error, 'warning');
+            } else {
+                showToast(errorData.error || '发送失败', 'error');
             }
         }
-
+            } catch (error) {
+        showToast('网络错误，请重试', 'error');
+            }
+        }
+        
         async function loadOnlineUsers() {
             try {
                 const response = await fetch('/api/users/online');
@@ -1539,29 +1550,29 @@
                 console.error('加载在线用户失败:', error);
             }
         }
-
+        
         function renderUserList() {
             const container = document.getElementById('user-list');
             container.innerHTML = '';
-
+        
             if (onlineUsers.length === 0) {
                 container.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 40px;">仅显示30秒内在线的用户</div>';
                 return;
             }
-
+        
             onlineUsers.forEach(user => {
                 const userElement = createUserElement(user);
                 container.appendChild(userElement);
             });
         }
-
+        
         function createUserElement(user) {
             const div = document.createElement('div');
             div.className = 'user-list-item';
-
+        
             const qqAvatarUrl = `https://q1.qlogo.cn/g?b=qq&nk=${user.qq}&s=100`;
             const avatarFallback = user.nickname.charAt(0).toUpperCase();
-
+        
             div.innerHTML = `
                 <div class="user-list-avatar">
                     <img src="${qqAvatarUrl}" alt="头像" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
@@ -1572,31 +1583,31 @@
                     <div class="user-list-id">QQ: ${user.qq}</div>
                 </div>
             `;
-
+        
             return div;
         }
-
+        
         function updateOnlineCount() {
             document.getElementById('online-count').textContent = `在线: ${onlineUsers.length}`;
         }
-
+        
         function startMessagePolling() {
             loadMessages();
             loadOnlineUsers();
-
+        
             messageInterval = setInterval(() => {
                 loadMessages();
                 loadOnlineUsers();
             }, 3000);
         }
-
+        
         function stopMessagePolling() {
             if (messageInterval) {
                 clearInterval(messageInterval);
                 messageInterval = null;
             }
         }
-
+        
         function startHeartbeat() {
             if (currentUser) {
                 heartbeatInterval = setInterval(() => {
@@ -1611,17 +1622,17 @@
                 }, 15000);
             }
         }
-
+        
         function stopHeartbeat() {
             if (heartbeatInterval) {
                 clearInterval(heartbeatInterval);
                 heartbeatInterval = null;
             }
         }
-
+        
         async function clearMessages() {
             if (!confirm('确定要清空所有已发送的消息吗？')) return;
-
+        
             try {
                 const response = await fetch('/api/messages', { method: 'DELETE' });
                 if (response.ok) {
@@ -1635,18 +1646,18 @@
                 showToast('网络错误，请重试', 'error');
             }
         }
-
+        
         function exportMessages() {
             if (messages.length === 0) {
                 showToast('没有消息可导出', 'warning');
                 return;
             }
-
+        
             const content = messages.map(msg => {
                 const time = new Date(msg.created_at).toLocaleString('zh-CN');
                 return `[${time}] ${msg.nickname}(QQ:${msg.qq}): ${msg.content}`;
             }).join('\n');
-
+        
             const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -1654,21 +1665,21 @@
             a.download = `聊天记录_${new Date().toLocaleDateString('zh-CN')}.txt`;
             a.click();
             URL.revokeObjectURL(url);
-
+        
             showToast('消息已导出', 'success');
         }
-
+        
         function toggleSearch() {
             document.getElementById('search-modal').classList.add('active');
             document.getElementById('search-input').focus();
         }
-
+        
         function closeSearchModal() {
             document.getElementById('search-modal').classList.remove('active');
             document.getElementById('search-input').value = '';
             document.getElementById('search-results').innerHTML = '';
         }
-
+        
         function handleSearch() {
             const query = document.getElementById('search-input').value.trim().toLowerCase();
             const resultsContainer = document.getElementById('search-results');
@@ -1677,17 +1688,17 @@
                 resultsContainer.innerHTML = '';
                 return;
             }
-
+        
             const filteredMessages = messages.filter(msg => 
                 msg.content.toLowerCase().includes(query) ||
                 msg.nickname.toLowerCase().includes(query)
             );
-
+        
             if (filteredMessages.length === 0) {
                 resultsContainer.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 20px;">未找到相关消息</div>';
                 return;
             }
-
+        
             resultsContainer.innerHTML = filteredMessages.map(msg => {
                 const time = new Date(msg.created_at).toLocaleString('zh-CN');
                 return `
@@ -1698,7 +1709,7 @@
                 `;
             }).join('');
         }
-
+        
         function jumpToMessage(messageId) {
             closeSearchModal();
         
@@ -1718,7 +1729,7 @@
                 showToast('消息未找到', 'error');
             }
         }
-
+        
         function showNicknameModal() {
             const modal = document.getElementById('modal');
             document.getElementById('modal-title').textContent = '修改昵称';
@@ -1731,7 +1742,7 @@
             `;
             modal.classList.add('active');
         }
-
+        
         async function updateNickname() {
             const newNickname = document.getElementById('new-nickname').value.trim();
             
@@ -1739,7 +1750,7 @@
                 showToast('昵称不能为空', 'error');
                 return;
             }
-
+        
             try {
                 const response = await fetch('/api/user/nickname', {
                     method: 'PUT',
@@ -1751,9 +1762,9 @@
                         nickname: newNickname
                     })
                 });
-
+        
                 const data = await response.json();
-
+        
                 if (response.ok) {
                     currentUser.nickname = newNickname;
                     localStorage.setItem('currentUser', JSON.stringify(currentUser));
@@ -1767,55 +1778,55 @@
                 showToast('网络错误，请重试', 'error');
             }
         }
-
+        
         function clearAllMessages() {
             if (!confirm('确定要清空已发送的所有聊天记录吗？此操作不可恢复！')) return;
-
+        
             clearMessages();
             closeModal();
         }
-
+        
         function logout() {
             if (!confirm('确定要退出登录吗？')) return;
-
+        
             currentUser = null;
             localStorage.removeItem('currentUser');
             stopMessagePolling();
             stopHeartbeat();
-
+        
             document.getElementById('auth-container').style.display = 'flex';
             document.getElementById('user-status-bar').style.display = 'none';
             document.getElementById('bottom-nav').style.display = 'none';
             document.getElementById('talkease-interface').classList.remove('active');
-
+        
             document.getElementById('login-form').reset();
             document.getElementById('register-form').reset();
-
+        
             showToast('已退出登录', 'success');
             closeModal();
         }
-
+        
         function closeModal() {
             document.getElementById('modal').classList.remove('active');
         }
-
+        
         function showToast(message, type = 'success') {
             const toast = document.createElement('div');
             toast.className = `toast ${type}`;
             toast.textContent = message;
             document.body.appendChild(toast);
-
+        
             setTimeout(() => {
                 toast.remove();
             }, 3000);
         }
-
+        
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
         }
-
+        
         window.addEventListener('beforeunload', function() {
             stopMessagePolling();
             stopHeartbeat();
