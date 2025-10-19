@@ -2,8 +2,12 @@ export default {
     async fetch(request, env, ctx) {
         try {
             const url = new URL(request.url);
-            const { method } = request;
-            const { pathname } = url;
+            const {
+                method
+            } = request;
+            const {
+                pathname
+            } = url;
 
             const headers = {
                 'Access-Control-Allow-Origin': '*',
@@ -13,7 +17,9 @@ export default {
             };
 
             if (method === 'OPTIONS') {
-                return new Response(null, { headers });
+                return new Response(null, {
+                    headers
+                });
             }
 
             if (method === 'POST' && pathname === '/api/register') {
@@ -63,14 +69,29 @@ export default {
 
         } catch (error) {
             console.error('全局错误:', error);
-            return createResponse({ error: '服务器内部错误' }, 500);
+            return createResponse({
+                error: '服务器内部错误'
+            }, 500);
         }
     }
 };
 
 addEventListener('scheduled', event => {
-    event.waitUntil(checkOfflineUsers());
+    event.waitUntil(Promise.all([
+        checkOfflineUsers(),
+        cleanupIPLimits()
+    ]));
 });
+
+async function cleanupIPLimits() {
+    try {
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        await env.DB.prepare('DELETE FROM ip_limits WHERE created_at < ?').bind(thirtyDaysAgo).run();
+        console.log('定时任务: 已清理过期的IP限制记录');
+    } catch (error) {
+        console.error('清理IP限制记录错误:', error);
+    }
+}
 
 async function checkOfflineUsers() {
     try {
@@ -122,6 +143,46 @@ function createResponse(data, status = 200, customHeaders = {}) {
     });
 }
 
+async function checkUserLimits(env, qq, ip) {
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+
+    const user = await env.DB.prepare('SELECT last_message_time FROM users WHERE qq = ?').bind(qq).first();
+    if (user && user.last_message_time) {
+        const lastMessageTime = new Date(user.last_message_time);
+        const timeDiff = (now - lastMessageTime) / (1000 * 60);
+
+        if (timeDiff < 5) {
+            return {
+                allowed: false,
+                reason: `发送频率过快，请等待 ${Math.ceil(5 - timeDiff)} 分钟后再发送`
+            };
+        }
+    }
+
+    if (ip) {
+        const ipRecord = await env.DB.prepare('SELECT last_register_date FROM ip_limits WHERE ip = ?')
+            .bind(ip).first();
+
+        if (ipRecord && ipRecord.last_register_date) {
+            const lastRegisterDate = new Date(ipRecord.last_register_date);
+            const daysDiff = (now - lastRegisterDate) / (1000 * 60 * 60 * 24);
+
+            if (daysDiff < 30) {
+                const remainingDays = Math.ceil(30 - daysDiff);
+                return {
+                    allowed: false,
+                    reason: `每个IP地址30天内只能注册一个账号，请等待 ${remainingDays} 天后再注册`
+                };
+            }
+        }
+    }
+
+    return {
+        allowed: true
+    };
+}
+
 async function parseJSONRequest(request) {
     const contentType = request.headers.get('content-type');
     if (!contentType?.includes('application/json')) {
@@ -132,32 +193,55 @@ async function parseJSONRequest(request) {
 
 async function handleRegister(request, env) {
     try {
-        const { qq, nickname, password } = await parseJSONRequest(request);
+        const {
+            qq,
+            nickname,
+            password
+        } = await parseJSONRequest(request);
+
+        const clientIP = request.headers.get('CF-Connecting-IP') || 'unknown';
+
+        const ipLimit = await checkIPRegisterLimit(env, clientIP);
+        if (!ipLimit.allowed) {
+            return createResponse({
+                error: ipLimit.reason
+            }, 429);
+        }
 
         if (!validateQQ(qq)) {
-            return createResponse({ error: 'QQ号码必须是5-12位数字' }, 400);
+            return createResponse({
+                error: 'QQ号码必须是5-12位数字'
+            }, 400);
         }
 
         if (!validateNickname(nickname)) {
-            return createResponse({ error: '昵称不能为空且不能超过20个字符' }, 400);
+            return createResponse({
+                error: '昵称不能为空且不能超过20个字符'
+            }, 400);
         }
 
         if (!validatePassword(password)) {
-            return createResponse({ error: '密码长度必须在6-20位之间' }, 400);
+            return createResponse({
+                error: '密码长度必须在6-20位之间'
+            }, 400);
         }
 
         const existingUser = await env.DB.prepare('SELECT qq FROM users WHERE qq = ?').bind(qq).first();
-
         if (existingUser) {
-            return createResponse({ error: '该QQ号码已被注册' }, 409);
+            return createResponse({
+                error: '该QQ号码已被注册'
+            }, 409);
         }
 
         const passwordHash = await hashPassword(password);
         const now = new Date().toISOString();
+        const today = new Date().toISOString().split('T')[0];
 
-        await env.DB.prepare('INSERT INTO users (qq, nickname, password_hash, created_at, last_login, online) VALUES (?, ?, ?, ?, ?, ?)')
-            .bind(qq, nickname.trim(), passwordHash, now, now, 0)
+        await env.DB.prepare('INSERT INTO users (qq, nickname, password_hash, created_at, last_login, online, register_ip) VALUES (?, ?, ?, ?, ?, ?, ?)')
+            .bind(qq, nickname.trim(), passwordHash, now, now, 0, clientIP)
             .run();
+
+        await updateIPRegisterLimit(env, clientIP, today);
 
         return createResponse({
             message: '注册成功',
@@ -169,27 +253,72 @@ async function handleRegister(request, env) {
 
     } catch (error) {
         console.error('注册错误:', error);
-        return createResponse({ error: error.message || '注册失败' }, 400);
+        return createResponse({
+            error: error.message || '注册失败'
+        }, 400);
+    }
+}
+
+async function checkIPRegisterLimit(env, ip) {
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    const ipRecord = await env.DB.prepare('SELECT register_count, last_register_date FROM ip_limits WHERE ip = ?')
+        .bind(ip).first();
+
+    if (ipRecord) {
+        if (ipRecord.last_register_date >= thirtyDaysAgo && ipRecord.register_count >= 1) {
+            return {
+                allowed: false,
+                reason: '每个IP地址每30天只能注册一个账号'
+            };
+        }
+    }
+
+    return {
+        allowed: true
+    };
+}
+
+async function updateIPRegisterLimit(env, ip) {
+    const today = new Date().toISOString().split('T')[0];
+    const existing = await env.DB.prepare('SELECT ip FROM ip_limits WHERE ip = ?').bind(ip).first();
+
+    if (existing) {
+        await env.DB.prepare('UPDATE ip_limits SET register_count = 1, last_register_date = ? WHERE ip = ?')
+            .bind(today, ip).run();
+    } else {
+        await env.DB.prepare('INSERT INTO ip_limits (ip, register_count, last_register_date, created_at) VALUES (?, ?, ?, ?)')
+            .bind(ip, 1, today, new Date().toISOString()).run();
     }
 }
 
 async function handleLogin(request, env) {
     try {
-        const { qq, password } = await parseJSONRequest(request);
+        const {
+            qq,
+            password
+        } = await parseJSONRequest(request);
 
         if (!qq || !password) {
-            return createResponse({ error: '请填写完整信息' }, 400);
+            return createResponse({
+                error: '请填写完整信息'
+            }, 400);
         }
 
         const user = await env.DB.prepare('SELECT qq, nickname, password_hash FROM users WHERE qq = ?').bind(qq).first();
 
         if (!user) {
-            return createResponse({ error: '用户不存在' }, 404);
+            return createResponse({
+                error: '用户不存在'
+            }, 404);
         }
 
         const passwordHash = await hashPassword(password);
         if (user.password_hash !== passwordHash) {
-            return createResponse({ error: '密码错误' }, 401);
+            return createResponse({
+                error: '密码错误'
+            }, 401);
         }
 
         const now = new Date().toISOString();
@@ -205,26 +334,37 @@ async function handleLogin(request, env) {
 
     } catch (error) {
         console.error('登录错误:', error);
-        return createResponse({ error: error.message || '登录失败' }, 400);
+        return createResponse({
+            error: error.message || '登录失败'
+        }, 400);
     }
 }
 
 async function handleUpdateNickname(request, env) {
     try {
-        const { qq, nickname } = await parseJSONRequest(request);
+        const {
+            qq,
+            nickname
+        } = await parseJSONRequest(request);
 
         if (!qq || !nickname) {
-            return createResponse({ error: '参数不完整' }, 400);
+            return createResponse({
+                error: '参数不完整'
+            }, 400);
         }
 
         if (!validateNickname(nickname)) {
-            return createResponse({ error: '昵称不能为空且不能超过20个字符' }, 400);
+            return createResponse({
+                error: '昵称不能为空且不能超过20个字符'
+            }, 400);
         }
 
         const result = await env.DB.prepare('UPDATE users SET nickname = ? WHERE qq = ?').bind(nickname.trim(), qq).run();
 
         if (result.changes === 0) {
-            return createResponse({ error: '用户不存在' }, 404);
+            return createResponse({
+                error: '用户不存在'
+            }, 404);
         }
 
         return createResponse({
@@ -237,7 +377,9 @@ async function handleUpdateNickname(request, env) {
 
     } catch (error) {
         console.error('更新昵称错误:', error);
-        return createResponse({ error: error.message || '更新失败' }, 400);
+        return createResponse({
+            error: error.message || '更新失败'
+        }, 400);
     }
 }
 
@@ -246,13 +388,17 @@ async function handleGetUserInfo(request, env, url) {
         const qq = url.pathname.split('/')[3];
 
         if (!qq) {
-            return createResponse({ error: 'QQ号码不能为空' }, 400);
+            return createResponse({
+                error: 'QQ号码不能为空'
+            }, 400);
         }
 
         const user = await env.DB.prepare('SELECT qq, nickname, created_at, last_login, online FROM users WHERE qq = ?').bind(qq).first();
 
         if (!user) {
-            return createResponse({ error: '用户不存在' }, 404);
+            return createResponse({
+                error: '用户不存在'
+            }, 404);
         }
 
         return createResponse({
@@ -267,34 +413,61 @@ async function handleGetUserInfo(request, env, url) {
 
     } catch (error) {
         console.error('获取用户信息错误:', error);
-        return createResponse({ error: error.message || '获取失败' }, 400);
+        return createResponse({
+            error: error.message || '获取失败'
+        }, 400);
     }
 }
 
 async function handlePostMessage(request, env) {
     try {
-        const { qq, content } = await parseJSONRequest(request);
+        const {
+            qq,
+            content
+        } = await parseJSONRequest(request);
 
         if (!qq || !content) {
-            return createResponse({ error: '参数不完整' }, 400);
+            return createResponse({
+                error: '参数不完整'
+            }, 400);
         }
 
         if (!validateMessage(content)) {
-            return createResponse({ error: '消息内容不能为空且不能超过1000个字符' }, 400);
+            return createResponse({
+                error: '消息内容不能为空且不能超过1000个字符'
+            }, 400);
         }
 
-        const user = await env.DB.prepare('SELECT qq, nickname FROM users WHERE qq = ?').bind(qq).first();
-
+        const user = await env.DB.prepare('SELECT qq, nickname, last_message_time FROM users WHERE qq = ?').bind(qq).first();
         if (!user) {
-            return createResponse({ error: '用户不存在' }, 404);
+            return createResponse({
+                error: '用户不存在'
+            }, 404);
+        }
+
+        const now = new Date();
+        if (user.last_message_time) {
+            const lastMessageTime = new Date(user.last_message_time);
+            const timeDiff = (now - lastMessageTime) / (1000 * 60);
+
+            if (timeDiff < 5) {
+                const waitTime = Math.ceil(5 - timeDiff);
+                return createResponse({
+                    error: `发送频率过快，请等待 ${waitTime} 分钟后再发送`
+                }, 429);
+            }
         }
 
         const nickname = user.nickname;
-
-        const now = new Date().toISOString();
         const messageId = generateId();
+        const nowISO = now.toISOString();
+        const today = nowISO.split('T')[0];
 
-        await env.DB.prepare('INSERT INTO messages (id, qq, content, created_at) VALUES (?, ?, ?, ?)').bind(messageId, qq, content.trim(), now).run();
+        await env.DB.prepare('INSERT INTO messages (id, qq, content, created_at) VALUES (?, ?, ?, ?)')
+            .bind(messageId, qq, content.trim(), nowISO).run();
+
+        await env.DB.prepare('UPDATE users SET last_message_time = ? WHERE qq = ?')
+            .bind(nowISO, qq).run();
 
         return createResponse({
             message: '发送成功',
@@ -304,7 +477,9 @@ async function handlePostMessage(request, env) {
 
     } catch (error) {
         console.error('发送消息错误:', error);
-        return createResponse({ error: error.message || '发送失败' }, 400);
+        return createResponse({
+            error: error.message || '发送失败'
+        }, 400);
     }
 }
 
@@ -341,7 +516,9 @@ async function handleGetMessages(request, env, url) {
 
     } catch (error) {
         console.error('获取消息错误:', error);
-        return createResponse({ error: error.message || '获取失败' }, 400);
+        return createResponse({
+            error: error.message || '获取失败'
+        }, 400);
     }
 }
 
@@ -355,7 +532,9 @@ async function handleClearMessages(request, env) {
 
     } catch (error) {
         console.error('清空消息错误:', error);
-        return createResponse({ error: error.message || '清空失败' }, 400);
+        return createResponse({
+            error: error.message || '清空失败'
+        }, 400);
     }
 }
 
@@ -372,21 +551,29 @@ async function handleGetOnlineUsers(request, env) {
 
     } catch (error) {
         console.error('获取在线用户错误:', error);
-        return createResponse({ error: error.message || '获取失败' }, 400);
+        return createResponse({
+            error: error.message || '获取失败'
+        }, 400);
     }
 }
 
 async function handleHeartbeat(request, env) {
     try {
-        const { qq } = await parseJSONRequest(request);
+        const {
+            qq
+        } = await parseJSONRequest(request);
         const now = new Date().toISOString();
 
         await env.DB.prepare('UPDATE users SET last_login = ?, online = 1 WHERE qq = ?').bind(now, qq).run();
 
-        return createResponse({ message: '心跳成功' });
+        return createResponse({
+            message: '心跳成功'
+        });
     } catch (error) {
         console.error('心跳失败:', error);
-        return createResponse({ error: '心跳失败' }, 400);
+        return createResponse({
+            error: '心跳失败'
+        }, 400);
     }
 }
 
